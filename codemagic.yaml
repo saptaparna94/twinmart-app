@@ -23,6 +23,6 @@ workflows:
       - name: Xcode Build Simulator App
         script: |
           # 🌟 This forces Xcode to build a testing app package bundle without needing any paid Apple profile keys!
-          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Debug -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          xcodebuild -workspace ios/app/App.xcworkspace -scheme App -configuration Debug -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
     artifacts:
-      - ios/App/build/Debug-iphonesimulator/*.app
+      - ios/app/build/Debug-iphonesimulator/*.app
