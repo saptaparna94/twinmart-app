@@ -1,0 +1,29 @@
+workflows:
+  ios-capacitor-workflow:
+    name: TwinMart iOS Cloud Build
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      node: latest
+      xcode: latest
+      cocoapods: default
+    triggering:
+      events:
+        - push
+      branches:
+        - main
+    scripts:
+      - name: Install dependencies
+        script: |
+          npm install
+      - name: Next.js Production Build Export
+        script: |
+          npm run build
+      - name: Capacitor Sync Assets
+        script: |
+          npx cap sync ios
+      - name: Xcode Build Project
+        script: |
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Debug -allowProvisioningUpdates CODE_SIGNING_ALLOWED=NO
+    artifacts:
+      - ios/App/build/Debug-iphoneos/*.app
