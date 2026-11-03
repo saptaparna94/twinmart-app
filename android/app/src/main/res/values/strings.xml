@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TwinMart</string>
+    <string name="title_activity_main">TwinMart</string>
+    <string name="package_name">com.twinmart.app</string>
+    <string name="custom_url_scheme">com.twinmart.app</string>
+</resources>
