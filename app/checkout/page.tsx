@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabaseUrl = "https://vuudksvnfuffkapxfhsf.supabase.co";
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1dWRrc3ZuZnVmZmthcHhmaHNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MTA5NjUsImV4cCI6MjEwOTE4Njk2NX0.md1RKkLbgwZSubheCtouw06rgIeX7YdwE3Kd6aKZkxM";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface Product {
