@@ -20,8 +20,9 @@ workflows:
       - name: Capacitor Sync Assets
         script: |
           npx cap sync ios
-      - name: Xcode Build Project
+      - name: Xcode Build Simulator App
         script: |
-          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Debug -allowProvisioningUpdates CODE_SIGNING_ALLOWED=NO
+          # 🌟 This forces Xcode to build a testing app package bundle without needing any paid Apple profile keys!
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Debug -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
     artifacts:
-      - ios/App/build/Debug-iphoneos/*.app
+      - ios/App/build/Debug-iphonesimulator/*.app
