@@ -1,12 +1,16 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import Script from 'next/script';
 
-// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-// const supabase = createClient(supabaseUrl, supabaseAnonKey);
-// ✨ PASTE THIS HARD-BAKED SECURE CONNECTION VERSION:
+// declare global {
+//   interface Window {
+//     Razorpay: any;
+//   }
+// }
+
 const supabaseUrl = "https://vuudksvnfuffkapxfhsf.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1dWRrc3ZuZnVmZmthcHhmaHNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MTA5NjUsImV4cCI6MjEwOTE4Njk2NX0.md1RKkLbgwZSubheCtouw06rgIeX7YdwE3Kd6aKZkxM";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -35,13 +39,13 @@ export default function Home() {
   const [activeScreen, setActiveScreen] = useState<'home' | 'cart' | 'checkout' | 'success' | 'orders'>('home');
   const [address, setAddress] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // ✨ PASTE THIS CORRECTED COMPONENT VERSION OVER IT:
   const [cartLoaded, setCartLoaded] = useState(false);
 
-  // 1. Safe Isolated Load Hook with macro-task isolation gate
+  // 1. Safe Isolated Load Hook
   useEffect(() => {
     try {
       const savedCart = localStorage.getItem('twinmart-cart');
+
       if (savedCart) {
         setTimeout(() => {
           setCart(JSON.parse(savedCart));
@@ -54,27 +58,32 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Basket memory recovery failed:', error);
+
       setTimeout(() => {
         setCartLoaded(true);
       }, 0);
     }
   }, []);
 
-  // 2. State-Gated Save Hook (Strictly blocks empty state overwrites on fresh boots)
+  // 2. State-Gated Save Hook
   useEffect(() => {
     if (cartLoaded) {
       localStorage.setItem('twinmart-cart', JSON.stringify(cart));
     }
   }, [cart, cartLoaded]);
 
-
   // Live Products Database Pull Pipeline
   useEffect(() => {
     let isMounted = true;
+
     async function fetchProducts() {
       try {
-        const { data, error } = await supabase.from('products').select('*');
+        const { data, error } = await supabase
+          .from('products')
+          .select('*');
+
         if (!isMounted) return;
+
         if (error) {
           setApiError(error.message);
         } else {
@@ -82,51 +91,85 @@ export default function Home() {
         }
       } catch (error) {
         if (!isMounted) return;
-        setApiError(error instanceof Error ? error.message : 'Could not load products');
+
+        setApiError(
+          error instanceof Error
+            ? error.message
+            : 'Could not load products'
+        );
       } finally {
         if (isMounted) setLoading(false);
       }
     }
+
     fetchProducts();
-    return () => { isMounted = false; };
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // Live Orders Tracker Fetching Hook Setup
+  // Live Orders Tracker Fetching Hook
   useEffect(() => {
     if (activeScreen !== 'orders') return;
+
     let isMounted = true;
+
     async function fetchOrders() {
       setOrdersLoading(true);
+
       try {
         const { data, error } = await supabase
           .from('orders')
           .select('*')
           .order('id', { ascending: false });
+
         if (!isMounted) return;
-        if (!error) setUserOrders(data ?? []);
+
+        if (!error) {
+          setUserOrders(data ?? []);
+        } else {
+          console.error('Orders fetching error:', error.message);
+        }
       } catch (err) {
         console.error('Orders fetching engine crash:', err);
       } finally {
         if (isMounted) setOrdersLoading(false);
       }
     }
+
     fetchOrders();
-    return () => { isMounted = false; };
+
+    return () => {
+      isMounted = false;
+    };
   }, [activeScreen]);
 
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
+
       if (existing) {
-        return prev.map((item) => item.id === product.id ? { ...item, qty: item.qty + 1 } : item);
+        return prev.map((item) =>
+          item.id === product.id
+            ? { ...item, qty: item.qty + 1 }
+            : item
+        );
       }
+
       return [...prev, { ...product, qty: 1 }];
     });
   };
 
   const updateQuantity = (id: number, change: number) => {
     setCart((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, qty: item.qty + change } : item)).filter((item) => item.qty > 0)
+      prev
+        .map((item) =>
+          item.id === id
+            ? { ...item, qty: item.qty + change }
+            : item
+        )
+        .filter((item) => item.qty > 0)
     );
   };
 
@@ -134,38 +177,210 @@ export default function Home() {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const cartItemCount = cart.reduce(
+    (sum, item) => sum + item.qty,
+    0
+  );
+
+  const cartTotal = cart.reduce(
+    (sum, item) =>
+      sum + Number(item.price || 0) * item.qty,
+    0
+  );
+
+  // Integrated Online Payment and Verification Handler
   const handlePlaceOrder = async () => {
-    if (!address.trim()) { alert('Please enter delivery address!'); return; }
+    if (!address.trim()) {
+      alert('Please enter delivery address!');
+      return;
+    }
+
+    if (cart.length === 0) {
+      alert('Your cart is empty!');
+      return;
+    }
+
+    if (!window.Razorpay) {
+      alert('Payment gateway is loading. Please try again.');
+      return;
+    }
+
     setIsSubmitting(true);
-    const summary = cart.map((item) => `${item.name} x ${item.qty}`).join(', ');
+
     try {
-      const { error } = await supabase.from('orders').insert([
-        { total_price: cartTotal, delivery_address: address.trim(), items_summary: summary },
-      ]);
-      if (error) { alert(error.message); return; }
-      setCart([]);
-      setAddress('');
-      setActiveScreen('success');
+      // Step 1: Create Razorpay order through our backend.
+      // The backend calculates the actual total using Supabase prices.
+
+      const orderApiResponse = await fetch(
+        '/api/payment/create-order',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            items: cart.map((item) => ({
+              id: item.id,
+              qty: item.qty,
+            })),
+            address: address.trim(),
+          }),
+        }
+      );
+
+      const orderData = await orderApiResponse.json();
+
+      if (!orderApiResponse.ok || !orderData.orderId) {
+        throw new Error(
+          orderData.error ||
+          'Failed to initialize payment.'
+        );
+      }
+
+      // Step 2: Configure Razorpay checkout.
+
+      const options = {
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency || 'INR',
+        name: 'TwinMart',
+        description: 'Secure Order Payment Checkout',
+        order_id: orderData.orderId,
+
+        handler: async function (paymentResponse: any) {
+          try {
+            setIsSubmitting(true);
+
+            // Step 3: Verify payment on the backend.
+
+            const verifyResponse = await fetch(
+              '/api/payment/verify',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  razorpay_order_id:
+                    paymentResponse.razorpay_order_id,
+
+                  razorpay_payment_id:
+                    paymentResponse.razorpay_payment_id,
+
+                  razorpay_signature:
+                    paymentResponse.razorpay_signature,
+                }),
+              }
+            );
+
+            const verifyData = await verifyResponse.json();
+
+            if (verifyResponse.ok && verifyData.success) {
+              // Clear cart only after successful verification.
+
+              setCart([]);
+              setAddress('');
+              localStorage.removeItem('twinmart-cart');
+
+              setActiveScreen('success');
+            } else {
+              alert(
+                verifyData.error ||
+                verifyData.message ||
+                'Payment verification failed.'
+              );
+            }
+          } catch (err: any) {
+            alert(
+              'Verification execution halted: ' +
+              err.message
+            );
+          } finally {
+            setIsSubmitting(false);
+          }
+        },
+
+        prefill: {
+          name: 'Customer Profile',
+          email: 'shopper@twinmart.com',
+        },
+
+        theme: {
+          color: '#ff3f6c',
+        },
+
+        modal: {
+          ondismiss: function () {
+            setIsSubmitting(false);
+          },
+        },
+      };
+
+      const razorpayInstance = new window.Razorpay(options);
+
+      razorpayInstance.on('payment.failed', function (response: any) {
+        alert(
+          response?.error?.description ||
+          'Payment failed. Please try again.'
+        );
+
+        setIsSubmitting(false);
+      });
+
+      razorpayInstance.open();
+
     } catch (err: any) {
-      alert(err.message);
-    } finally {
+      alert(
+        err.message ||
+        'An unexpected error occurred while processing your order.'
+      );
+
       setIsSubmitting(false);
     }
   };
 
-  const cartItemCount = cart.reduce((sum, item) => sum + item.qty, 0);
-  const cartTotal = cart.reduce((sum, item) => sum + Number(item.price || 0) * item.qty, 0);
-  const categories = ['All', ...Array.from(new Set(products.map((p) => p.category).filter(Boolean)))];
+  const categories = [
+    'All',
+    ...Array.from(
+      new Set(
+        products
+          .map((p) => p.category)
+          .filter(Boolean)
+      )
+    ),
+  ];
 
   const filteredProducts = products.filter((product) => {
     const productName = (product.name || '').toLowerCase();
     const productCategory = (product.category || '').toLowerCase();
     const searchText = search.toLowerCase();
-    return (productName.includes(searchText) || productCategory.includes(searchText)) && 
-           (selectedCategory === 'All' || product.category === selectedCategory);
+
+    return (
+      (productName.includes(searchText) ||
+        productCategory.includes(searchText)) &&
+      (selectedCategory === 'All' ||
+        product.category === selectedCategory)
+    );
   });
+
   return (
-    <main style={{ minHeight: '100vh', backgroundColor: '#F5F6F8', color: '#282C3F', fontFamily: 'sans-serif', margin: 0, paddingBottom: '120px' }}>
+    <main
+      style={{
+        minHeight: '100vh',
+        backgroundColor: '#F5F6F8',
+        color: '#282C3F',
+        fontFamily: 'sans-serif',
+        margin: 0,
+        paddingBottom: '120px',
+      }}
+    >
+
+      {/* Razorpay Checkout Script */}
+      <Script
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        strategy="afterInteractive"
+      />
+
       <style>{`
         .store-header { display: flex; justify-content: space-between; align-items: center; background: #ffffff; padding: 12px 24px; border-bottom: 1px solid #f5f5f6; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
         .logo-box { cursor: pointer; }
@@ -210,35 +425,65 @@ export default function Home() {
         .sidebar-card { background: #ffffff; border: 1px solid #eaeaec; border-radius: 4px; padding: 16px; }
         .receipt-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 12px; }
         .place-order-btn { display: block; width: 100%; background: #ff3f6c; color: white; border: none; text-align: center; padding: 14px 0; font-size: 14px; font-weight: 700; text-transform: uppercase; border-radius: 4px; cursor: pointer; text-decoration: none; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .place-order-btn:disabled { background: #d4d5d9; cursor: not-allowed; }
       `}</style>
-      {/* Premium Navigation Header Block */}
+
       <header className="store-header">
         <div onClick={() => setActiveScreen('home')} className="logo-box">
-          <h1 className="logo-title">Twin<span className="pink-brand">Mart</span></h1>
+          <h1 className="logo-title">
+            Twin<span className="pink-brand">Mart</span>
+          </h1>
           <p className="logo-sub">Shop Smart, Live Better</p>
         </div>
 
         <div style={{ display: 'flex', gap: '16px', fontSize: '12px', fontWeight: 'bold' }}>
-          <span onClick={() => setActiveScreen('home')} style={{ cursor: 'pointer', color: activeScreen === 'home' ? '#ff3f6c' : '#282c3f' }}>Home</span>
-          <span onClick={() => setActiveScreen('orders')} style={{ cursor: 'pointer', color: activeScreen === 'orders' ? '#ff3f6c' : '#282c3f' }}>My Orders</span>
+          <span
+            onClick={() => setActiveScreen('home')}
+            style={{
+              cursor: 'pointer',
+              color: activeScreen === 'home' ? '#ff3f6c' : '#282c3f',
+            }}
+          >
+            Home
+          </span>
+
+          <span
+            onClick={() => setActiveScreen('orders')}
+            style={{
+              cursor: 'pointer',
+              color: activeScreen === 'orders' ? '#ff3f6c' : '#282c3f',
+            }}
+          >
+            My Orders
+          </span>
         </div>
 
-        <div onClick={() => setActiveScreen('cart')} className="cart-pill-btn">
+        <div
+          onClick={() => setActiveScreen('cart')}
+          className="cart-pill-btn"
+        >
           <span>🛒</span>
           <span style={{ fontSize: '12px' }}>Bag</span>
-          {cartItemCount > 0 && <span className="cart-count-badge">{cartItemCount}</span>}
+
+          {cartItemCount > 0 && (
+            <span className="cart-count-badge">
+              {cartItemCount}
+            </span>
+          )}
         </div>
       </header>
 
-      {/* RETAIL MAIN INTERFACE LAYER COMPONENT ROUTER */}
       <div className="main-content">
-        
-        {/* VIEW ONE: HOMEPAGE PRODUCT CATALOG ARRIVALS */}
+
+        {/* HOME SCREEN */}
         {activeScreen === 'home' && (
           <>
-            <div className="search-wrapper" style={{ margin: '0 auto 20px auto' }}>
+            <div
+              className="search-wrapper"
+              style={{ margin: '0 auto 20px auto' }}
+            >
               <span className="search-icon">⌕</span>
+
               <input
                 id="product-search"
                 type="search"
@@ -252,13 +497,23 @@ export default function Home() {
             <section className="promo-banner">
               <p className="banner-tag">Trending Offer</p>
               <h2 className="banner-title">FLAT 50% OFF</h2>
-              <p className="banner-desc">Upgrade your wardrobe with top styles and daily essentials.</p>
+              <p className="banner-desc">
+                Upgrade your wardrobe with top styles and daily essentials.
+              </p>
             </section>
 
             <section>
               <div className="category-slider">
                 {categories.map((category) => (
-                  <button key={category} onClick={() => setSelectedCategory(category)} className={`cat-btn ${selectedCategory === category ? 'active' : ''}`}>{category}</button>
+                  <button
+                    key={category}
+                    onClick={() => setSelectedCategory(category)}
+                    className={`cat-btn ${
+                      selectedCategory === category ? 'active' : ''
+                    }`}
+                  >
+                    {category}
+                  </button>
                 ))}
               </div>
             </section>
@@ -267,14 +522,30 @@ export default function Home() {
               {filteredProducts.map((product) => (
                 <article key={product.id} className="product-card">
                   <div className="image-wrapper">
-                    <img src={product.image_url || "https://unsplash.com"} alt={product.name} />
-                    <div className="card-cat-badge">{product.category}</div>
+                    <img
+                      src={product.image_url || 'https://unsplash.com'}
+                      alt={product.name}
+                    />
+
+                    <div className="card-cat-badge">
+                      {product.category}
+                    </div>
                   </div>
+
                   <div className="card-details">
                     <h3 className="prod-name">{product.name}</h3>
+
                     <div className="card-footer">
-                      <span className="prod-price">₹{Number(product.price).toLocaleString('en-IN')}</span>
-                      <button onClick={() => addToCart(product)} className="add-btn">Add</button>
+                      <span className="prod-price">
+                        ₹{Number(product.price).toLocaleString('en-IN')}
+                      </span>
+
+                      <button
+                        onClick={() => addToCart(product)}
+                        className="add-btn"
+                      >
+                        Add
+                      </button>
                     </div>
                   </div>
                 </article>
@@ -285,43 +556,158 @@ export default function Home() {
               <div className="floating-bottom-bar">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <span style={{ fontSize: '22px' }}>🛍️</span>
+
                   <div>
-                    <p className="bar-items-label">{cartItemCount} Items Selected</p>
-                    <p style={{ margin: '2px 0 0 0', fontWeight: '900' }}>₹{cartTotal.toLocaleString('en-IN')}</p>
+                    <p className="bar-items-label">
+                      {cartItemCount} Items Selected
+                    </p>
+
+                    <p style={{ margin: '2px 0 0 0', fontWeight: '900' }}>
+                      ₹{cartTotal.toLocaleString('en-IN')}
+                    </p>
                   </div>
+
+                  <button
+                    onClick={() => setActiveScreen('cart')}
+                    className="view-bag-btn"
+                  >
+                    View Bag
+                  </button>
                 </div>
-                <button onClick={() => setActiveScreen('cart')} className="view-bag-btn">View Bag →</button>
               </div>
             )}
           </>
         )}
 
-        {/* VIEW TWO: SHOPPING BAG SUMMARY REVIEW */}
+        {/* CART SCREEN */}
         {activeScreen === 'cart' && (
           <div className="cart-layout">
             <section>
-              <button onClick={() => setActiveScreen('home')} style={{ background: '#f5f5f6', border: 'none', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', marginBottom: '14px', cursor: 'pointer' }}>← Back to Dashboard</button>
+              <button
+                onClick={() => setActiveScreen('home')}
+                style={{
+                  background: '#f5f5f6',
+                  border: 'none',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  marginBottom: '14px',
+                  cursor: 'pointer',
+                }}
+              >
+                ← Back to Dashboard
+              </button>
+
               {cart.length === 0 ? (
-                <div style={{ background: 'white', padding: '40px', borderRadius: '8px', textAlign: 'center', border: '1px solid #eaeaec' }}>
+                <div
+                  style={{
+                    background: 'white',
+                    padding: '40px',
+                    borderRadius: '8px',
+                    textAlign: 'center',
+                    border: '1px solid #eaeaec',
+                  }}
+                >
                   <h3>Your shopping bag is empty</h3>
-                  <button onClick={() => setActiveScreen('home')} className="place-order-btn" style={{ maxWidth: '160px', margin: '12px auto 0 auto', padding: '10px' }}>Shop Now</button>
+
+                  <button
+                    onClick={() => setActiveScreen('home')}
+                    className="place-order-btn"
+                    style={{
+                      maxWidth: '160px',
+                      margin: '12px auto 0 auto',
+                      padding: '10px',
+                    }}
+                  >
+                    Shop Now
+                  </button>
                 </div>
               ) : (
                 cart.map((item) => (
                   <article key={item.id} className="cart-card">
-                    <img src={item.image_url || "https://unsplash.com"} style={{ width: '80px', height: '95px', objectFit: 'cover', borderRadius: '4px' }} alt={item.name} />
-                    <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <img
+                      src={item.image_url || 'https://unsplash.com'}
+                      style={{
+                        width: '80px',
+                        height: '95px',
+                        objectFit: 'cover',
+                        borderRadius: '4px',
+                      }}
+                      alt={item.name}
+                    />
+
+                    <div
+                      style={{
+                        flexGrow: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                      }}
+                    >
                       <div>
-                        <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 'bold' }}>{item.name}</h4>
-                        <p style={{ margin: '4px 0 0 0', fontSize: '13px', fontWeight: '900', color: '#ff3f6c' }}>₹{Number(item.price).toLocaleString('en-IN')}</p>
+                        <h4
+                          style={{
+                            margin: 0,
+                            fontSize: '13px',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          {item.name}
+                        </h4>
+
+                        <p
+                          style={{
+                            margin: '4px 0 0 0',
+                            fontSize: '13px',
+                            fontWeight: '900',
+                            color: '#ff3f6c',
+                          }}
+                        >
+                          ₹{Number(item.price).toLocaleString('en-IN')}
+                        </p>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginTop: '10px',
+                        }}
+                      >
                         <div className="qty-pill">
-                          <button onClick={() => updateQuantity(item.id, -1)} className="qty-btn">−</button>
-                          <span style={{ fontSize: '12px', fontWeight: 'bold' }}>{item.qty}</span>
-                          <button onClick={() => updateQuantity(item.id, 1)} className="qty-btn">+</button>
+                          <button
+                            onClick={() => updateQuantity(item.id, -1)}
+                            className="qty-btn"
+                          >
+                            −
+                          </button>
+
+                          <span style={{ fontSize: '12px', fontWeight: 'bold' }}>
+                            {item.qty}
+                          </span>
+
+                          <button
+                            onClick={() => updateQuantity(item.id, 1)}
+                            className="qty-btn"
+                          >
+                            +
+                          </button>
                         </div>
-                        <button onClick={() => removeItem(item.id)} className="remove-btn">Remove</button>
+
+                        <button
+                          onClick={() => removeItem(item.id)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#7e818c',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Remove
+                        </button>
                       </div>
                     </div>
                   </article>
@@ -331,75 +717,408 @@ export default function Home() {
 
             {cart.length > 0 && (
               <aside className="sidebar-card">
-                <h3 style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#7e818c' }}>PRICE DETAILS</h3>
-                <div className="receipt-row"><span>Total MRP</span><span>₹{(cartTotal * 2).toLocaleString('en-IN')}</span></div>
-                <div className="receipt-row" style={{ color: '#03a685' }}><span>Discount</span><span>−₹{cartTotal.toLocaleString('en-IN')}</span></div>
-                <div className="receipt-total"><span>Total Amount</span><span style={{ color: '#ff3f6c' }}>₹{cartTotal.toLocaleString('en-IN')}</span></div>
-                <button onClick={() => setActiveScreen('checkout')} className="place-order-btn" style={{ marginTop: '16px' }}>Proceed to Checkout</button>
+                <h3
+                  style={{
+                    margin: '0 0 12px 0',
+                    fontSize: '12px',
+                    color: '#7e818c',
+                  }}
+                >
+                  PRICE DETAILS
+                </h3>
+
+                <div className="receipt-row">
+                  <span>Total MRP</span>
+                  <span>
+                    ₹{(cartTotal * 2).toLocaleString('en-IN')}
+                  </span>
+                </div>
+
+                <div
+                  className="receipt-row"
+                  style={{ color: '#03a685' }}
+                >
+                  <span>Discount</span>
+                  <span>
+                    −₹{cartTotal.toLocaleString('en-IN')}
+                  </span>
+                </div>
+
+                <div
+                  className="receipt-total"
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontWeight: 'bold',
+                    borderTop: '1px dashed #eaeaec',
+                    paddingTop: '12px',
+                  }}
+                >
+                  <span>Total Amount</span>
+
+                  <span style={{ color: '#ff3f6c' }}>
+                    ₹{cartTotal.toLocaleString('en-IN')}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => setActiveScreen('checkout')}
+                  className="place-order-btn"
+                  style={{ marginTop: '16px' }}
+                >
+                  Proceed to Checkout
+                </button>
               </aside>
             )}
           </div>
         )}
 
-        {/* VIEW THREE: SECURE BILLING ADDRESS SUBMISSION */}
+        {/* CHECKOUT SCREEN */}
         {activeScreen === 'checkout' && (
-          <div style={{ maxWidth: '500px', margin: '0 auto', background: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #eaeaec' }}>
-            <button onClick={() => setActiveScreen('cart')} style={{ background: 'transparent', border: 'none', color: '#ff3f6c', fontSize: '12px', fontWeight: 'bold', padding: 0, marginBottom: '12px', cursor: 'pointer' }}>← Back to Bag</button>
-            <h2 style={{ fontSize: '18px', fontWeight: '900', margin: '0 0 16px 0' }}>Delivery Address</h2>
-            <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Enter flat/house number, building, street, pincode details..." rows={4} style={{ width: '100%', borderRadius: '8px', border: '1px solid #d4d5d9', padding: '12px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
-            <button onClick={handlePlaceOrder} disabled={isSubmitting} className="place-order-btn" style={{ marginTop: '20px' }}>{isSubmitting ? 'Securing Order paths...' : 'CONFIRM ORDER'}</button>
+          <div
+            style={{
+              maxWidth: '500px',
+              margin: '0 auto',
+              background: 'white',
+              padding: '24px',
+              borderRadius: '12px',
+              border: '1px solid #eaeaec',
+            }}
+          >
+            <button
+              onClick={() => setActiveScreen('cart')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#ff3f6c',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                padding: 0,
+                marginBottom: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              ← Back to Bag
+            </button>
+
+            <h2
+              style={{
+                fontSize: '18px',
+                fontWeight: '900',
+                margin: '0 0 16px 0',
+              }}
+            >
+              Delivery Address
+            </h2>
+
+            <textarea
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Enter flat/house number, building, street, pincode details..."
+              rows={4}
+              style={{
+                width: '100%',
+                borderRadius: '8px',
+                border: '1px solid #d4d5d9',
+                padding: '12px',
+                fontSize: '13px',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+
+            <button
+              onClick={handlePlaceOrder}
+              disabled={isSubmitting}
+              className="place-order-btn"
+              style={{ marginTop: '20px' }}
+            >
+              {isSubmitting
+                ? 'Processing Payment Overlay...'
+                : 'PAY VIA RAZORPAY'}
+            </button>
           </div>
         )}
 
-        {/* VIEW FOUR: SUCCESS CELEBRATION DISPATCH DASHBOARD */}
+        {/* SUCCESS SCREEN */}
         {activeScreen === 'success' && (
-          <div style={{ maxWidth: '400px', margin: '60px auto 0 auto', background: 'white', padding: '32px', borderRadius: '16px', textAlign: 'center', boxShadow: '0 4px 16px rgba(0,0,0,0.05)' }}>
+          <div
+            style={{
+              maxWidth: '400px',
+              margin: '60px auto 0 auto',
+              background: 'white',
+              padding: '32px',
+              borderRadius: '16px',
+              textAlign: 'center',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
+            }}
+          >
             <div style={{ fontSize: '40px' }}>🎉</div>
-            <h2 style={{ fontSize: '18px', fontWeight: '900', margin: '12px 0 0 0' }}>ORDER CONFIRMED!</h2>
-            <p style={{ fontSize: '12px', color: '#7e818c', margin: '6px 0 20px 0', lineHeight: '1.5' }}>Your order summary has been successfully saved to our system. 10 Mins Express shipping initialized.</p>
-            <button onClick={() => setActiveScreen('orders')} className="place-order-btn">View My Orders</button>
+
+            <h2
+              style={{
+                fontSize: '18px',
+                fontWeight: '900',
+                margin: '12px 0 0 0',
+              }}
+            >
+              PAYMENT RECEIVED!
+            </h2>
+
+            <p
+              style={{
+                fontSize: '12px',
+                color: '#7e818c',
+                margin: '6px 0 20px 0',
+                lineHeight: '1.5',
+              }}
+            >
+              Your online order signature has been securely verified.
+              10 Mins Express shipping initialized.
+            </p>
+
+            <button
+              onClick={() => setActiveScreen('orders')}
+              className="place-order-btn"
+            >
+              View My Orders
+            </button>
           </div>
         )}
 
-        {/* VIEW FIVE: LIVE DYNAMIC REAL-TIME ORDERS MANAGEMENT DASHBOARD */}
+        {/* ORDERS SCREEN */}
         {activeScreen === 'orders' && (
-          <div style={{ maxWidth: '700px', margin: '0 auto', paddingBottom: '40px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <button onClick={() => setActiveScreen('home')} style={{ background: '#f5f5f6', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>← Back to Shop</button>
-              <h2 style={{ fontSize: '18px', fontWeight: '900', margin: 0 }}>My Orders History</h2>
+          <div
+            style={{
+              maxWidth: '700px',
+              margin: '0 auto',
+              paddingBottom: '40px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+              }}
+            >
+              <button
+                onClick={() => setActiveScreen('home')}
+                style={{
+                  background: '#f5f5f6',
+                  border: 'none',
+                  padding: '8px 14px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                }}
+              >
+                ← Back to Shop
+              </button>
+
+              <h2
+                style={{
+                  fontSize: '18px',
+                  fontWeight: '900',
+                  margin: 0,
+                }}
+              >
+                My Orders History
+              </h2>
             </div>
 
             {ordersLoading ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#9496a2', fontSize: '13px', fontWeight: 'bold' }}>
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '40px',
+                  color: '#9496a2',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                }}
+              >
                 Fetching fresh database updates...
               </div>
             ) : userOrders.length === 0 ? (
-              <div style={{ background: 'white', padding: '40px', borderRadius: '12px', textAlign: 'center', border: '1px solid #eaeaec' }}>
+              <div
+                style={{
+                  background: 'white',
+                  padding: '40px',
+                  borderRadius: '12px',
+                  textAlign: 'center',
+                  border: '1px solid #eaeaec',
+                }}
+              >
                 <p style={{ fontSize: '28px', margin: 0 }}>📦</p>
-                <h3 style={{ fontSize: '14px', margin: '8px 0 0 0' }}>No purchase history found</h3>
-                <p style={{ fontSize: '12px', color: '#7e818c', margin: '4px 0 0 0' }}>Place your first express storefront order to view it live here.</p>
+
+                <h3
+                  style={{
+                    fontSize: '14px',
+                    margin: '8px 0 0 0',
+                  }}
+                >
+                  No purchase history found
+                </h3>
+
+                <p
+                  style={{
+                    fontSize: '12px',
+                    color: '#7e818c',
+                    margin: '4px 0 0 0',
+                  }}
+                >
+                  Place your first express storefront order to view it live here.
+                </p>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                }}
+              >
                 {userOrders.map((order) => (
-                  <div key={order.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid #eaeaec', padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f5f5f6', paddingBottom: '12px', marginBottom: '12px' }}>
+                  <div
+                    key={order.id}
+                    style={{
+                      background: 'white',
+                      borderRadius: '12px',
+                      border: '1px solid #eaeaec',
+                      padding: '20px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        borderBottom: '1px solid #f5f5f6',
+                        paddingBottom: '12px',
+                        marginBottom: '12px',
+                      }}
+                    >
                       <div>
-                        <p style={{ margin: 0, fontSize: '11px', fontWeight: 'bold', color: '#a9abb2', textTransform: 'uppercase' }}>Order ID: #TM-{order.id}</p>
-                        <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#7e818c' }}>Payment: Cash on Delivery</p>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: '11px',
+                            fontWeight: 'bold',
+                            color: '#a9abb2',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          Order ID: #TM-{order.id}
+                        </p>
+
+                        <p
+                          style={{
+                            margin: '2px 0 0 0',
+                            fontSize: '11px',
+                            color: '#7e818c',
+                          }}
+                        >
+                          Method: {order.payment_method || 'ONLINE'}
+                        </p>
                       </div>
-                      <span style={{ fontSize: '11px', fontWeight: '900', color: '#03a685', background: '#e6f6f2', padding: '4px 10px', borderRadius: '20px', textTransform: 'uppercase' }}>In Transit</span>
+
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: '900',
+                          color:
+                            order.status === 'Paid'
+                              ? '#03a685'
+                              : '#ff905a',
+                          background:
+                            order.status === 'Paid'
+                              ? '#e6f6f2'
+                              : '#fff3ec',
+                          padding: '4px 10px',
+                          borderRadius: '20px',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {order.status || 'Paid'}
+                      </span>
                     </div>
-                    
-                    <p style={{ margin: '0 0 4px 0', fontSize: '12px', fontWeight: 'bold', color: '#282c3f' }}>Items summary:</p>
-                    <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#535766', lineHeight: '1.4' }}>{order.items_summary}</p>
-                    
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f5f5f6', paddingTop: '12px' }}>
+
+                    <p
+                      style={{
+                        margin: '0 0 4px 0',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        color: '#282c3f',
+                      }}
+                    >
+                      Items summary:
+                    </p>
+
+                    <p
+                      style={{
+                        margin: '0 0 12px 0',
+                        fontSize: '13px',
+                        color: '#535766',
+                        lineHeight: '1.4',
+                      }}
+                    >
+                      {order.items_summary}
+                    </p>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        borderTop: '1px solid #f5f5f6',
+                        paddingTop: '12px',
+                      }}
+                    >
                       <div>
-                        <p style={{ margin: 0, fontSize: '11px', fontWeight: 'bold', color: '#a9abb2', textTransform: 'uppercase' }}>Total paid</p>
-                        <p style={{ margin: '2px 0 0 0', fontSize: '16px', fontWeight: '900', color: '#ff3f6c' }}>₹{Number(order.total_price || 0).toLocaleString('en-IN')}</p>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: '11px',
+                            fontWeight: 'bold',
+                            color: '#a9abb2',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          Amount Total
+                        </p>
+
+                        <p
+                          style={{
+                            margin: '2px 0 0 0',
+                            fontSize: '16px',
+                            fontWeight: '900',
+                            color: '#ff3f6c',
+                          }}
+                        >
+                          ₹{Number(order.total_price || 0).toLocaleString('en-IN')}
+                        </p>
                       </div>
-                      <button onClick={() => alert('Express tracking tracker link live!')} style={{ background: '#282c3f', color: '#ffffff', border: 'none', padding: '10px 16px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', cursor: 'pointer' }}>Track Order</button>
+
+                      <button
+                        onClick={() =>
+                          alert('Express tracking tracker link live!')
+                        }
+                        style={{
+                          background: '#282c3f',
+                          color: '#ffffff',
+                          border: 'none',
+                          padding: '10px 16px',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Track Order
+                      </button>
                     </div>
                   </div>
                 ))}

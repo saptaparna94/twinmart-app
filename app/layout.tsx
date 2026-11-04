@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import Script from "next/script"; // 👈 Import the Next.js Script component
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,7 +32,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body className="antialiased bg-neutral-50 text-neutral-900">{children}</body>
+      <body className="antialiased bg-neutral-50 text-neutral-900">
+        {children}
+        {/* 👈 Loads the Razorpay checkout modal overlay window globally */}
+        <Script
+          src="https://razorpay.com"
+          strategy="lazyOnload"
+        />
+      </body>
     </html>
   );
 }

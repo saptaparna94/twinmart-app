@@ -1,10 +1,10 @@
-import type { CapacitorConfig } from '@capacitor/cli';
+  import type { CapacitorConfig } from '@capacitor/cli';
 
-const config: CapacitorConfig = {
-  appId: 'com.twinmart.app',
-  appName: 'TwinMart',
-  webDir: 'out',
+  const config: CapacitorConfig = {
+    appId: 'com.twinmart.app',
+    appName: 'TwinMart',
+    webDir: 'out',
 
-};
+  };
 
-export default config;
+  export default config;
