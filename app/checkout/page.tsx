@@ -258,7 +258,7 @@ if (!RazorpayCheckout) {
 
     try {
       // Ask our backend to calculate the total and create a Razorpay order.
-      const createResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/api/payment/create-order`, {
+      const createResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/api/payment/create-order/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -292,7 +292,7 @@ if (!RazorpayCheckout) {
 
           try {
             // Verify payment on our server.
-            const verifyResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/api/payment/verify`, {
+            const verifyResponse = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/api/payment/verify/`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
