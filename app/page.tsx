@@ -212,7 +212,8 @@ export default function Home() {
       // The backend calculates the actual total using Supabase prices.
 
       const orderApiResponse = await fetch(
-        '/api/payment/create-order',
+        
+        `${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/api/payment/create-order`,
         {
           method: 'POST',
           headers: {
@@ -254,7 +255,7 @@ export default function Home() {
             // Step 3: Verify payment on the backend.
 
             const verifyResponse = await fetch(
-              '/api/payment/verify',
+              `${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/api/payment/verify`,
               {
                 method: 'POST',
                 headers: {

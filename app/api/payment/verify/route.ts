@@ -5,6 +5,43 @@ import Razorpay from "razorpay";
 import { createHmac, timingSafeEqual } from "crypto";
 
 export const runtime = "nodejs";
+const allowedOrigins = [
+  "https://localhost",
+  "http://localhost",
+  "capacitor://localhost",
+  "https://twinmart-app.vercel.app",
+];
+
+function getCorsHeaders(request: NextRequest) {
+  const origin = request.headers.get("origin");
+
+  return {
+    ...(origin && allowedOrigins.includes(origin)
+      ? { "Access-Control-Allow-Origin": origin }
+      : {}),
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    Vary: "Origin",
+  };
+}
+
+function corsJson(
+  request: NextRequest,
+  body: unknown,
+  init?: { status?: number }
+) {
+  return NextResponse.json(body, {
+    ...init,
+    headers: getCorsHeaders(request),
+  });
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: getCorsHeaders(request),
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +56,7 @@ export async function POST(request: NextRequest) {
       !razorpayKeyId ||
       !razorpayKeySecret
     ) {
-      return NextResponse.json(
+      return corsJson(request,
         { error: "Payment server configuration is incomplete." },
         { status: 500 }
       );
@@ -39,7 +76,7 @@ export async function POST(request: NextRequest) {
       !/^order_[a-zA-Z0-9]+$/.test(orderId) ||
       !/^[a-fA-F0-9]{64}$/.test(signature)
     ) {
-      return NextResponse.json(
+      return corsJson(request,
         { error: "Invalid payment verification details." },
         { status: 400 }
       );
@@ -60,7 +97,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (pendingError || !pending) {
-      return NextResponse.json(
+      return corsJson(request,
         { error: "Pending order not found." },
         { status: 404 }
       );
@@ -75,14 +112,14 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (existingOrder) {
-        return NextResponse.json({
+        return corsJson(request,{
           success: true,
           message: "Payment was already verified.",
           orderId: existingOrder.id,
         });
       }
 
-      return NextResponse.json(
+      return corsJson(request,
         { error: "This payment has already been processed." },
         { status: 409 }
       );
@@ -103,7 +140,7 @@ export async function POST(request: NextRequest) {
       receivedBuffer.length !== expectedBuffer.length ||
       !timingSafeEqual(receivedBuffer, expectedBuffer)
     ) {
-      return NextResponse.json(
+      return corsJson(request,
         { error: "Payment signature verification failed." },
         { status: 400 }
       );
@@ -122,7 +159,7 @@ export async function POST(request: NextRequest) {
       payment.amount !== Number(pending.amount_paise) ||
       payment.currency !== "INR"
     ) {
-      return NextResponse.json(
+      return corsJson(request,
         { error: "Payment details do not match your order." },
         { status: 400 }
       );
@@ -130,7 +167,7 @@ export async function POST(request: NextRequest) {
 
     // Only captured payments are accepted.
     if (payment.status !== "captured") {
-      return NextResponse.json(
+      return corsJson(request,
         {
           error:
             "Payment has not been captured yet. Please contact support if money was deducted.",
@@ -164,7 +201,7 @@ export async function POST(request: NextRequest) {
           .maybeSingle();
 
         if (existingOrder) {
-          return NextResponse.json({
+          return corsJson(request,{
             success: true,
             message: "Payment was already verified.",
             orderId: existingOrder.id,
@@ -174,7 +211,7 @@ export async function POST(request: NextRequest) {
 
       console.error("Order insert error:", insertError);
 
-      return NextResponse.json(
+      return corsJson(request,
         {
           error:
             "Payment succeeded, but saving the order failed. Please contact support with your payment ID.",
@@ -197,7 +234,7 @@ export async function POST(request: NextRequest) {
       console.error("Pending payment update error:", updateError);
     }
 
-    return NextResponse.json({
+    return corsJson(request,{
       success: true,
       message: "Payment verified and order saved.",
       orderId: savedOrder.id,
@@ -205,7 +242,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Payment verification error:", error);
 
-    return NextResponse.json(
+    return corsJson(request,
       {
         error:
           "Unable to verify payment. Please contact support if money was deducted.",

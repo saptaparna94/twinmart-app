@@ -4,6 +4,41 @@ import Razorpay from "razorpay";
 import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
+const allowedOrigins = [
+  "https://localhost",
+  "http://localhost",
+  "capacitor://localhost",
+  "https://twinmart-app.vercel.app",
+];
+
+function getCorsHeaders(request: NextRequest) {
+  const origin = request.headers.get("origin");
+
+  return {
+    ...(origin && allowedOrigins.includes(origin)
+      ? { "Access-Control-Allow-Origin": origin }
+      : {}),
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    Vary: "Origin",
+  };
+}
+function corsJson(
+  request: NextRequest,
+  body: unknown,
+  init?: { status?: number }
+) {
+  return NextResponse.json(body, {
+    ...init,
+    headers: getCorsHeaders(request),
+  });
+}
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: getCorsHeaders(request),
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,7 +48,7 @@ export async function POST(request: NextRequest) {
     const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
 
     if (!supabaseUrl || !supabaseSecret || !razorpayKeyId || !razorpayKeySecret) {
-      return NextResponse.json(
+      return corsJson(request,
         { error: "Payment server configuration is incomplete." },
         { status: 500 }
       );
@@ -27,14 +62,14 @@ export async function POST(request: NextRequest) {
     const items = body.items;
 
     if (!address || address.length > 500) {
-      return NextResponse.json(
+      return corsJson(request,
         { error: "Please provide a valid delivery address." },
         { status: 400 }
       );
     }
 
     if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
-      return NextResponse.json(
+      return corsJson(request,
         { error: "Your cart is empty or invalid." },
         { status: 400 }
       );
@@ -54,7 +89,7 @@ export async function POST(request: NextRequest) {
         qty < 1 ||
         qty > 20
       ) {
-        return NextResponse.json(
+        return corsJson(request,
           { error: "Invalid product or quantity." },
           { status: 400 }
         );
@@ -80,7 +115,7 @@ export async function POST(request: NextRequest) {
       .in("id", productIds);
 
     if (productError || !products || products.length !== productIds.length) {
-      return NextResponse.json(
+      return corsJson(request,
         { error: "Some products could not be found. Please refresh your cart." },
         { status: 400 }
       );
@@ -102,7 +137,7 @@ export async function POST(request: NextRequest) {
     }).join(", ");
 
     if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) {
-      return NextResponse.json(
+      return corsJson(request,
         { error: "Invalid payment amount." },
         { status: 400 }
       );
@@ -139,13 +174,13 @@ export async function POST(request: NextRequest) {
     if (pendingError) {
       console.error("Pending order save error:", pendingError);
 
-      return NextResponse.json(
+      return corsJson(request,
         { error: "Could not save your pending order. Please try again." },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({
+    return corsJson(request,{
       keyId: razorpayKeyId,
       orderId: razorpayOrder.id,
       amount: amountPaise,
@@ -155,7 +190,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Create payment order error:", error);
 
-    return NextResponse.json(
+    return corsJson(request,
       { error: "Unable to start payment. Please try again." },
       { status: 500 }
     );
