@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Script from 'next/script';
+import AuthGate from './auth-gate';
 
 // declare global {
 //   interface Window {
@@ -364,9 +365,10 @@ export default function Home() {
     );
   });
 
-  return (
-    <main
-      style={{
+   return (
+    <AuthGate>
+      <main
+        style={{
         minHeight: '100vh',
         backgroundColor: '#F5F6F8',
         color: '#282C3F',
@@ -1128,7 +1130,8 @@ export default function Home() {
           </div>
         )}
 
-      </div>
-    </main>
+           </div>
+      </main>
+    </AuthGate>
   );
 }
