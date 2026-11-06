@@ -1,17 +1,23 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
   const router = useRouter();
 
-  const [phone, setPhone] = useState('');
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -35,37 +41,68 @@ export default function LoginPage() {
     };
   }, [router]);
 
-  const handleSendOTP = async (
-    e: React.FormEvent<HTMLFormElement>
-  ) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
+    setMessage('');
 
-    if (!/^[6-9]\d{9}$/.test(phone)) {
-      setError('Please enter a valid 10-digit Indian mobile number.');
-      return;
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (mode === 'signup') {
+      if (!name.trim()) {
+        setError('Please enter your name.');
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.');
+        return;
+      }
+
+      if (password.length < 6) {
+        setError('Password must contain at least 6 characters.');
+        return;
+      }
     }
 
-    const fullPhone = `+91${phone}`;
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: fullPhone,
-        options: {
-          shouldCreateUser: true,
-        },
-      });
+      if (mode === 'signup') {
+        const { data, error } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password,
+          options: {
+            data: {
+              full_name: name.trim(),
+            },
+          },
+        });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      sessionStorage.setItem('twinmart_phone', fullPhone);
-      router.push('/verify-otp');
+        if (data.session) {
+          router.replace('/');
+        } else {
+          setMessage(
+            'Account created. Please check your email if confirmation is required.'
+          );
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
+
+        if (error) throw error;
+
+        router.replace('/');
+      }
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : 'Unable to send OTP. Please try again.'
+          : 'Something went wrong. Please try again.'
       );
     } finally {
       setLoading(false);
@@ -113,6 +150,7 @@ export default function LoginPage() {
         }}>
           Twin<span style={{ color: '#ff3f6c' }}>Mart</span>
         </h1>
+
         <p style={{
           fontSize: '8px',
           fontWeight: 700,
@@ -172,74 +210,124 @@ export default function LoginPage() {
             fontWeight: 900,
             margin: '0 0 8px',
           }}>
-            Login or Signup
+            {mode === 'login' ? 'Login to your account' : 'Create your account'}
           </h2>
 
           <p style={{
             fontSize: '13px',
             lineHeight: 1.6,
             color: '#7e818c',
-            margin: '0 0 26px',
+            margin: '0 0 22px',
           }}>
-            Enter your mobile number to access your account and continue shopping.
+            {mode === 'login'
+              ? 'Enter your email and password to continue shopping.'
+              : 'Sign up with your email to start shopping with TwinMart.'}
           </p>
 
-          <form onSubmit={handleSendOTP}>
+          <form onSubmit={handleSubmit}>
+            {mode === 'signup' && (
+              <>
+                <label style={{
+                  display: 'block',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  marginBottom: '9px',
+                }}>
+                  Full Name
+                </label>
+
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Enter your full name"
+                  autoComplete="name"
+                  required
+                  style={inputStyle}
+                />
+              </>
+            )}
+
             <label style={{
               display: 'block',
               fontSize: '12px',
               fontWeight: 700,
               marginBottom: '9px',
             }}>
-              Mobile Number
+              Email Address
             </label>
 
-            <div style={{
-              display: 'flex',
-              border: '1px solid #d4d5d9',
-              borderRadius: '7px',
-              overflow: 'hidden',
-              background: '#ffffff',
-            }}>
-              <span style={{
-                padding: '13px 14px',
-                background: '#f5f5f6',
-                borderRight: '1px solid #eaeaec',
-                fontSize: '13px',
-                fontWeight: 700,
-              }}>
-                +91
-              </span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email address"
+              autoComplete="email"
+              required
+              style={inputStyle}
+            />
 
-              <input
-                type="tel"
-                inputMode="numeric"
-                value={phone}
-                onChange={(e) =>
-                  setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))
-                }
-                placeholder="Enter mobile number"
-                maxLength={10}
-                required
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  border: 'none',
-                  outline: 'none',
-                  padding: '13px',
-                  fontSize: '13px',
-                  color: '#282C3F',
-                }}
-              />
-            </div>
+            <label style={{
+              display: 'block',
+              fontSize: '12px',
+              fontWeight: 700,
+              margin: '17px 0 9px',
+            }}>
+              Password
+            </label>
+
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              autoComplete={
+                mode === 'login' ? 'current-password' : 'new-password'
+              }
+              required
+              style={inputStyle}
+            />
+
+            {mode === 'signup' && (
+              <>
+                <label style={{
+                  display: 'block',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  margin: '17px 0 9px',
+                }}>
+                  Confirm Password
+                </label>
+
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm your password"
+                  autoComplete="new-password"
+                  required
+                  style={inputStyle}
+                />
+              </>
+            )}
 
             {error && (
               <p style={{
                 color: '#d93025',
                 fontSize: '12px',
-                margin: '10px 0 0',
+                margin: '12px 0 0',
               }}>
                 {error}
+              </p>
+            )}
+
+            {message && (
+              <p style={{
+                color: '#16803c',
+                fontSize: '12px',
+                margin: '12px 0 0',
+              }}>
+                {message}
               </p>
             )}
 
@@ -261,9 +349,43 @@ export default function LoginPage() {
                 opacity: loading ? 0.65 : 1,
               }}
             >
-              {loading ? 'SENDING OTP...' : 'CONTINUE'}
+              {loading
+                ? 'PLEASE WAIT...'
+                : mode === 'login'
+                  ? 'LOGIN'
+                  : 'CREATE ACCOUNT'}
             </button>
           </form>
+
+          <div style={{
+            textAlign: 'center',
+            marginTop: '22px',
+            fontSize: '12px',
+            color: '#7e818c',
+          }}>
+            {mode === 'login'
+              ? "Don't have an account? "
+              : 'Already have an account? '}
+
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === 'login' ? 'signup' : 'login');
+                setError('');
+                setMessage('');
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#ff3f6c',
+                fontWeight: 900,
+                cursor: 'pointer',
+                fontSize: '12px',
+              }}
+            >
+              {mode === 'login' ? 'Sign Up' : 'Login'}
+            </button>
+          </div>
 
           <div style={{
             borderTop: '1px solid #f0f0f0',
@@ -285,3 +407,15 @@ export default function LoginPage() {
     </main>
   );
 }
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  border: '1px solid #d4d5d9',
+  borderRadius: '7px',
+  padding: '13px',
+  fontSize: '13px',
+  color: '#282C3F',
+  outline: 'none',
+  background: '#ffffff',
+};

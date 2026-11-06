@@ -41,6 +41,16 @@ export default function Home() {
   const [address, setAddress] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cartLoaded, setCartLoaded] = useState(false);
+  const handleLogout = async () => {
+  const { error } = await supabase.auth.signOut({ scope: 'local' });
+
+  if (error) {
+    alert('Unable to logout: ' + error.message);
+    return;
+  }
+
+  window.location.href = '/login';
+};
 
   // 1. Safe Isolated Load Hook
   useEffect(() => {
@@ -474,6 +484,21 @@ export default function Home() {
             </span>
           )}
         </div>
+                <button
+          onClick={handleLogout}
+          style={{
+            background: '#ffffff',
+            border: '1px solid #ff3f6c',
+            color: '#ff3f6c',
+            padding: '10px 14px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: '700',
+            cursor: 'pointer',
+          }}
+        >
+          Logout
+        </button>
       </header>
 
       <div className="main-content">
