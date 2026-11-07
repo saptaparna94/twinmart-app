@@ -107,8 +107,24 @@ export default function CartPage() {
       <div className="cart-container">
         
         {/* Products Column */}
-        <section>
-          <div className="pincode-bar">
+<section>
+
+  {/* Back to Shopping Button */}
+  <Link
+    href="/"
+    style={{
+      display: 'inline-block',
+      marginBottom: '16px',
+      color: '#ff3f6c',
+      fontSize: '13px',
+      fontWeight: '700',
+      textDecoration: 'none',
+    }}
+  >
+    ← Back to Shopping
+  </Link>
+
+  <div className="pincode-bar">
             <span>Check delivery time & services</span>
             <span style={{ color: '#ff3f6c', textTransform: 'uppercase', cursor: 'pointer' }}>Enter Pin Code</span>
           </div>

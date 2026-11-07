@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import Script from 'next/script';
 import AuthGate from './auth-gate';
@@ -29,6 +30,8 @@ interface CartItem extends Product {
 }
 
 export default function Home() {
+  const router = useRouter();
+
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [userOrders, setUserOrders] = useState<any[]>([]);
@@ -790,12 +793,12 @@ export default function Home() {
                 </div>
 
                 <button
-                  onClick={() => setActiveScreen('checkout')}
-                  className="place-order-btn"
-                  style={{ marginTop: '16px' }}
-                >
-                  Proceed to Checkout
-                </button>
+  onClick={() => router.push('/checkout')}
+  className="place-order-btn"
+  style={{ marginTop: '16px' }}
+>
+  Proceed to Checkout
+</button>
               </aside>
             )}
           </div>

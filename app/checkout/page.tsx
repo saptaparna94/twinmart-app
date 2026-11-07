@@ -23,6 +23,43 @@ interface Product {
 interface CartItem extends Product {
   qty: number;
 }
+interface UserAddress {
+  id: string;
+  user_id: string;
+  full_name: string;
+  phone: string;
+  address_line1: string;
+  address_line2: string | null;
+  landmark: string | null;
+  city: string;
+  state: string;
+  pincode: string;
+  address_type: string;
+  is_default: boolean;
+}
+interface AddressFormData {
+  full_name: string;
+  phone: string;
+  address_line1: string;
+  address_line2: string;
+  landmark: string;
+  city: string;
+  state: string;
+  pincode: string;
+  address_type: string;
+}
+function formatAddress(address: UserAddress) {
+  return [
+    address.full_name,
+    address.phone,
+    address.address_line1,
+    address.address_line2,
+    address.landmark,
+    `${address.city}, ${address.state} - ${address.pincode}`,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
 
 interface RazorpayResponse {
   razorpay_payment_id: string;
@@ -64,6 +101,25 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<'ONLINE' | 'COD'>('ONLINE');
   const [checkoutStep, setCheckoutStep] = useState<1 | 2>(1);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const [addresses, setAddresses] = useState<UserAddress[]>([]);
+const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+
+const [showAddressForm, setShowAddressForm] = useState(false);
+const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+
+const [addressForm, setAddressForm] = useState<AddressFormData>({
+  full_name: '',
+  phone: '',
+  address_line1: '',
+  address_line2: '',
+  landmark: '',
+  city: '',
+  state: '',
+  pincode: '',
+  address_type: 'Home',
+});
+
+const [addressLoading, setAddressLoading] = useState(false);
 
   // Load existing cart and saved address.
   useEffect(() => {
@@ -87,6 +143,314 @@ export default function CheckoutPage() {
 
     setLoaded(true);
   }, []);
+    // Load saved addresses from Supabase.
+  useEffect(() => {
+    const loadAddresses = async () => {
+      setAddressLoading(true);
+
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+          console.error('Unable to identify logged-in user:', userError);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('user_addresses')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          throw error;
+        }
+
+        const savedAddresses = (data || []) as UserAddress[];
+
+        setAddresses(savedAddresses);
+
+        const defaultAddress =
+          savedAddresses.find((item) => item.is_default) ||
+          savedAddresses[0];
+
+        if (defaultAddress) {
+          setSelectedAddressId(defaultAddress.id);
+          setAddress(formatAddress(defaultAddress));
+        }
+      } catch (error) {
+        console.error('Error loading addresses:', error);
+        setErrorMessage('Unable to load your saved addresses.');
+      } finally {
+        setAddressLoading(false);
+      }
+    };
+
+    loadAddresses();
+  }, []);
+    // Open form to add a new address.
+  const openAddAddressForm = () => {
+    setEditingAddressId(null);
+
+    setAddressForm({
+      full_name: '',
+      phone: '',
+      address_line1: '',
+      address_line2: '',
+      landmark: '',
+      city: '',
+      state: '',
+      pincode: '',
+      address_type: 'Home',
+    });
+
+    setShowAddressForm(true);
+  };
+
+  // Open form to edit an existing address.
+  const openEditAddressForm = (item: UserAddress) => {
+    setEditingAddressId(item.id);
+
+    setAddressForm({
+      full_name: item.full_name,
+      phone: item.phone,
+      address_line1: item.address_line1,
+      address_line2: item.address_line2 || '',
+      landmark: item.landmark || '',
+      city: item.city,
+      state: item.state,
+      pincode: item.pincode,
+      address_type: item.address_type,
+    });
+
+    setShowAddressForm(true);
+  };
+
+  // Save a new address or update an existing one.
+  const handleSaveAddress = async () => {
+    const {
+      full_name,
+      phone,
+      address_line1,
+      city,
+      state,
+      pincode,
+    } = addressForm;
+
+    if (
+      !full_name.trim() ||
+      !phone.trim() ||
+      !address_line1.trim() ||
+      !city.trim() ||
+      !state.trim() ||
+      !pincode.trim()
+    ) {
+      setErrorMessage('Please fill in all required address fields.');
+      return;
+    }
+
+    if (!/^[6-9]\d{9}$/.test(phone.trim())) {
+      setErrorMessage('Please enter a valid 10-digit Indian mobile number.');
+      return;
+    }
+
+    if (!/^\d{6}$/.test(pincode.trim())) {
+      setErrorMessage('Please enter a valid 6-digit PIN code.');
+      return;
+    }
+
+    setAddressLoading(true);
+    setErrorMessage('');
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        throw new Error('Please log in to save your address.');
+      }
+
+      const addressData = {
+        full_name: full_name.trim(),
+        phone: phone.trim(),
+        address_line1: address_line1.trim(),
+        address_line2: addressForm.address_line2.trim() || null,
+        landmark: addressForm.landmark.trim() || null,
+        city: city.trim(),
+        state: state.trim(),
+        pincode: pincode.trim(),
+        address_type: addressForm.address_type,
+      };
+
+      let savedData: UserAddress;
+
+      if (editingAddressId) {
+        const { data, error } = await supabase
+          .from('user_addresses')
+          .update(addressData)
+          .eq('id', editingAddressId)
+          .eq('user_id', user.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        savedData = data as UserAddress;
+
+        setAddresses((previous) =>
+          previous.map((item) =>
+            item.id === savedData.id ? savedData : item
+          )
+        );
+      } else {
+        const { data, error } = await supabase
+          .from('user_addresses')
+          .insert({
+            ...addressData,
+            user_id: user.id,
+            is_default: addresses.length === 0,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        savedData = data as UserAddress;
+
+        setAddresses((previous) => [...previous, savedData]);
+      }
+
+      setSelectedAddressId(savedData.id);
+      setAddress(formatAddress(savedData));
+      setShowAddressForm(false);
+      setEditingAddressId(null);
+    } catch (error) {
+      console.error('Error saving address:', error);
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to save address.'
+      );
+    } finally {
+      setAddressLoading(false);
+    }
+  };
+    // Set an address as the default delivery address.
+  const handleSetDefaultAddress = async (id: string) => {
+    setAddressLoading(true);
+    setErrorMessage('');
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        throw new Error('Please log in again.');
+      }
+
+      // Remove the default status from the user's other addresses.
+      const { error: resetError } = await supabase
+        .from('user_addresses')
+        .update({ is_default: false })
+        .eq('user_id', user.id);
+
+      if (resetError) throw resetError;
+
+      // Set the selected address as default.
+      const { error: updateError } = await supabase
+        .from('user_addresses')
+        .update({ is_default: true })
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (updateError) throw updateError;
+
+      setAddresses((previous) =>
+        previous.map((item) => ({
+          ...item,
+          is_default: item.id === id,
+        }))
+      );
+    } catch (error) {
+      console.error('Error setting default address:', error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to set default address.'
+      );
+    } finally {
+      setAddressLoading(false);
+    }
+  };
+
+  // Delete a saved address.
+  const handleDeleteAddress = async (id: string) => {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete this address?'
+    );
+
+    if (!confirmed) return;
+
+    setAddressLoading(true);
+    setErrorMessage('');
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        throw new Error('Please log in again.');
+      }
+
+      const { error } = await supabase
+        .from('user_addresses')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      const remainingAddresses = addresses.filter(
+        (item) => item.id !== id
+      );
+
+      setAddresses(remainingAddresses);
+
+      if (selectedAddressId === id) {
+        const nextAddress =
+          remainingAddresses.find((item) => item.is_default) ||
+          remainingAddresses[0];
+
+        if (nextAddress) {
+          setSelectedAddressId(nextAddress.id);
+          setAddress(formatAddress(nextAddress));
+        } else {
+          setSelectedAddressId(null);
+          setAddress('');
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting address:', error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to delete address.'
+      );
+    } finally {
+      setAddressLoading(false);
+    }
+  };
 
   const total = cart.reduce(
     (sum, item) => sum + Number(item.price || 0) * item.qty,
@@ -298,14 +662,14 @@ if (!RazorpayCheckout) {
 
       {/* Razorpay Checkout Script */}
       <Script
-        src="https://checkout.razorpay.com/v1/checkout.js"
-        strategy="afterInteractive"
-        onLoad={() => setRazorpayLoaded(true)}
-        onError={() => {
-          setRazorpayLoaded(false);
-          setErrorMessage('Unable to load payment gateway. Please refresh.');
-        }}
-      />
+  src="https://checkout.razorpay.com/v1/checkout.js"
+  strategy="afterInteractive"
+  onReady={() => setRazorpayLoaded(true)}
+  onError={() => {
+    setRazorpayLoaded(false);
+    setErrorMessage('Unable to load payment gateway. Please refresh.');
+  }}
+/>
 
       {/* Premium Original Sticky Header */}
       <header className="border-b bg-white px-4 py-4 sm:px-8 sticky top-0 z-40 shadow-xs">
@@ -368,36 +732,223 @@ if (!RazorpayCheckout) {
                   Delivery address
                 </h2>
 
-                {savedAddress && (
-                  <div className="mb-4 p-3.5 rounded-xl border-2 border-pink-500/20 bg-pink-50/30 text-left">
+              {addressLoading && (
+  <p className="text-xs text-neutral-500 mb-3">
+    Loading your saved addresses...
+  </p>
+)}
 
-                    <p className="text-[10px] font-black uppercase tracking-wider text-pink-500">
-                      📍 Saved Address Found
-                    </p>
+<div className="space-y-3">
+  {addresses.map((item) => (
+    <div
+      key={item.id}
+      className={`rounded-xl border-2 p-4 transition-all ${
+        selectedAddressId === item.id
+          ? 'border-pink-500 bg-pink-50/40'
+          : 'border-neutral-200 bg-white'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <input
+          type="radio"
+          name="deliveryAddress"
+          checked={selectedAddressId === item.id}
+          onChange={() => {
+            setSelectedAddressId(item.id);
+            setAddress(formatAddress(item));
+            setErrorMessage('');
+          }}
+          className="mt-1 accent-pink-500"
+        />
 
-                    <p className="text-xs font-bold text-neutral-700 mt-1 line-clamp-2">
-                      {savedAddress}
-                    </p>
+        <div className="flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-black text-neutral-900">
+              {item.full_name}
+            </span>
 
-                    <button
-                      type="button"
-                      onClick={() => setAddress(savedAddress)}
-                      className="mt-2 text-[10px] font-black uppercase tracking-wider text-neutral-950 underline hover:text-pink-500"
-                    >
-                      Select This Saved Address
-                    </button>
+            <span className="rounded-md bg-neutral-100 px-2 py-1 text-[9px] font-bold uppercase text-neutral-500">
+              {item.address_type}
+            </span>
 
-                  </div>
-                )}
+            {item.is_default && (
+              <span className="text-[9px] font-black uppercase text-pink-500">
+                Default
+              </span>
+            )}
+          </div>
 
-                <textarea
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Enter Flat/House no., Building Name, Street address, Pincode details..."
-                  rows={4}
-                  className="w-full rounded-xl border border-neutral-200 p-3 text-xs sm:text-sm outline-none focus:border-pink-500 text-neutral-800 transition-all placeholder:text-neutral-400"
-                />
+          <p className="mt-2 text-xs leading-relaxed text-neutral-600">
+            {formatAddress(item)}
+          </p>
 
+          <div className="mt-3 flex flex-wrap gap-4">
+            <button
+              type="button"
+              onClick={() => openEditAddressForm(item)}
+              className="text-[10px] font-black uppercase text-neutral-700 underline"
+            >
+              Edit
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleDeleteAddress(item.id)}
+              className="text-[10px] font-black uppercase text-red-500 underline"
+            >
+              Delete
+            </button>
+
+            {!item.is_default && (
+              <button
+                type="button"
+                onClick={() => handleSetDefaultAddress(item.id)}
+                className="text-[10px] font-black uppercase text-pink-500 underline"
+              >
+                Set as default
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  ))}
+</div>
+
+<button
+  type="button"
+  onClick={openAddAddressForm}
+  className="mt-4 w-full rounded-xl border-2 border-dashed border-pink-300 py-3 text-xs font-black uppercase tracking-wider text-pink-500 hover:bg-pink-50"
+>
+  + Add a New Address
+</button>
+{showAddressForm && (
+  <div className="mt-5 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+    <h3 className="mb-4 text-sm font-black uppercase text-neutral-800">
+      {editingAddressId ? 'Edit Address' : 'Add New Address'}
+    </h3>
+
+    <div className="grid gap-3 sm:grid-cols-2">
+      <input
+        type="text"
+        placeholder="Full Name *"
+        value={addressForm.full_name}
+        onChange={(e) =>
+          setAddressForm((prev) => ({ ...prev, full_name: e.target.value }))
+        }
+        className="rounded-lg border border-neutral-200 bg-white p-3 text-xs outline-none focus:border-pink-500"
+      />
+
+      <input
+        type="tel"
+        placeholder="10-digit Mobile Number *"
+        value={addressForm.phone}
+        onChange={(e) =>
+          setAddressForm((prev) => ({ ...prev, phone: e.target.value }))
+        }
+        maxLength={10}
+        className="rounded-lg border border-neutral-200 bg-white p-3 text-xs outline-none focus:border-pink-500"
+      />
+
+      <input
+        type="text"
+        placeholder="Flat / House No. / Building *"
+        value={addressForm.address_line1}
+        onChange={(e) =>
+          setAddressForm((prev) => ({ ...prev, address_line1: e.target.value }))
+        }
+        className="sm:col-span-2 rounded-lg border border-neutral-200 bg-white p-3 text-xs outline-none focus:border-pink-500"
+      />
+
+      <input
+        type="text"
+        placeholder="Area / Street (Optional)"
+        value={addressForm.address_line2}
+        onChange={(e) =>
+          setAddressForm((prev) => ({ ...prev, address_line2: e.target.value }))
+        }
+        className="rounded-lg border border-neutral-200 bg-white p-3 text-xs outline-none focus:border-pink-500"
+      />
+
+      <input
+        type="text"
+        placeholder="Landmark (Optional)"
+        value={addressForm.landmark}
+        onChange={(e) =>
+          setAddressForm((prev) => ({ ...prev, landmark: e.target.value }))
+        }
+        className="rounded-lg border border-neutral-200 bg-white p-3 text-xs outline-none focus:border-pink-500"
+      />
+
+      <input
+        type="text"
+        placeholder="City *"
+        value={addressForm.city}
+        onChange={(e) =>
+          setAddressForm((prev) => ({ ...prev, city: e.target.value }))
+        }
+        className="rounded-lg border border-neutral-200 bg-white p-3 text-xs outline-none focus:border-pink-500"
+      />
+
+      <input
+        type="text"
+        placeholder="State *"
+        value={addressForm.state}
+        onChange={(e) =>
+          setAddressForm((prev) => ({ ...prev, state: e.target.value }))
+        }
+        className="rounded-lg border border-neutral-200 bg-white p-3 text-xs outline-none focus:border-pink-500"
+      />
+
+      <input
+        type="text"
+        placeholder="6-digit PIN Code *"
+        value={addressForm.pincode}
+        onChange={(e) =>
+          setAddressForm((prev) => ({ ...prev, pincode: e.target.value }))
+        }
+        maxLength={6}
+        className="rounded-lg border border-neutral-200 bg-white p-3 text-xs outline-none focus:border-pink-500"
+      />
+
+      <select
+        value={addressForm.address_type}
+        onChange={(e) =>
+          setAddressForm((prev) => ({ ...prev, address_type: e.target.value }))
+        }
+        className="rounded-lg border border-neutral-200 bg-white p-3 text-xs outline-none focus:border-pink-500"
+      >
+        <option value="Home">Home</option>
+        <option value="Work">Work</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+
+    <div className="mt-4 flex gap-3">
+      <button
+        type="button"
+        onClick={handleSaveAddress}
+        disabled={addressLoading}
+        className="flex-1 rounded-lg bg-pink-500 py-3 text-xs font-black uppercase text-white disabled:opacity-50"
+      >
+        {addressLoading ? 'Saving...' : 'Save Address'}
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          setShowAddressForm(false);
+          setEditingAddressId(null);
+          setErrorMessage('');
+        }}
+        disabled={addressLoading}
+        className="flex-1 rounded-lg border border-neutral-300 bg-white py-3 text-xs font-black uppercase text-neutral-700"
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+)}
               </section>
             )}
 
